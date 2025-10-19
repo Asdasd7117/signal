@@ -1,25 +1,24 @@
 <!DOCTYPE html>
-<html lang="ar">
+<html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Binance Live Chart</title>
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<title>Binance Real Chart</title>
+<script src="https://cdn.jsdelivr.net/npm/lightweight-charts@3.7.0/dist/lightweight-charts.standalone.production.js"></script>
 <style>
-    body { font-family: Arial; background: #111; color: #fff; text-align: center; }
-    canvas { max-width: 1000px; margin: 20px auto; }
+    body { margin: 0; padding: 0; }
+    #chart { width: 100%; height: 500px; }
 </style>
 </head>
 <body>
-<h1>شارت BTC/USDT مباشر</h1>
-<canvas id="myChart"></canvas>
+<div id="chart"></div>
 
 <script>
 async function fetchKlines() {
-    const response = await fetch('/klines?symbol=BTCUSDT&interval=1m&limit=100');
-    const data = await response.json();
+    const res = await fetch('/api/klines?symbol=BTCUSDT&interval=1m&limit=100');
+    const data = await res.json();
     return data.map(k => ({
-        time: new Date(k[0]),
+        time: k[0] / 1000,
         open: parseFloat(k[1]),
         high: parseFloat(k[2]),
         low: parseFloat(k[3]),
@@ -28,30 +27,25 @@ async function fetchKlines() {
 }
 
 async function drawChart() {
-    const klines = await fetchKlines();
-    const ctx = document.getElementById('myChart').getContext('2d');
-    const chart = new Chart(ctx, {
-        type: 'candlestick', // نستخدم candlestick إذا كان Chart.js يدعمها مع plugin
-        data: {
-            labels: klines.map(k => k.time.toLocaleTimeString()),
-            datasets: [{
-                label: 'BTC/USDT',
-                data: klines.map(k => ({ o: k.open, h: k.high, l: k.low, c: k.close })),
-                borderColor: 'green',
-                backgroundColor: 'rgba(0,255,0,0.2)'
-            }]
-        },
-        options: {
-            responsive: true,
-            plugins: { legend: { display: true, color: '#fff' } },
-            scales: { x: { ticks: { color: '#fff' } }, y: { ticks: { color: '#fff' } } }
-        }
+    const chartData = await fetchKlines();
+    const chart = LightweightCharts.createChart(document.getElementById('chart'), {
+        layout: { backgroundColor: '#1e1e1e', textColor: '#ffffff' },
+        grid: { vertLines: { color: '#333' }, horzLines: { color: '#333' } },
+        rightPriceScale: { borderColor: '#555' },
+        timeScale: { borderColor: '#555' }
     });
+
+    const candleSeries = chart.addCandlestickSeries();
+    candleSeries.setData(chartData);
+
+    // تحديث البيانات كل دقيقة
+    setInterval(async () => {
+        const newData = await fetchKlines();
+        candleSeries.setData(newData);
+    }, 60000);
 }
 
-// تحديث الشارت كل دقيقة
 drawChart();
-setInterval(drawChart, 60000);
 </script>
 </body>
 </html>
