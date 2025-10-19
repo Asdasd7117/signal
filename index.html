@@ -3,117 +3,117 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>شارت Binance مع إشارات</title>
+<title>شارت Binance حي مع إشارات</title>
 <style>
-  body { font-family: Arial, sans-serif; margin: 0; padding: 0; background: #111; color: #fff; }
-  #chart { width: 100%; height: 400px; }
-  #price { font-size: 20px; margin: 10px; }
+    body { margin: 0; font-family: Arial, sans-serif; background: #111; color: #fff; }
+    #chart { width: 100%; height: 80vh; }
+    #price { text-align: center; margin: 10px; font-size: 18px; }
 </style>
+<script src="https://unpkg.com/lightweight-charts/dist/lightweight-charts.standalone.production.js"></script>
 </head>
 <body>
-
-<h2 style="text-align:center;">شارت Binance مباشر مع إشارات</h2>
-<div id="price">جارِ التحميل...</div>
 <div id="chart"></div>
+<div id="price">جارِ التحميل...</div>
 
-<script src="https://unpkg.com/lightweight-charts/dist/lightweight-charts.standalone.production.js"></script>
 <script>
-const chartDiv = document.getElementById('chart');
-const chart = LightweightCharts.createChart(chartDiv, { 
-    layout: { backgroundColor: '#111', textColor: '#fff' }, 
-    grid: { vertLines: { color: '#444' }, horzLines: { color: '#444' } } 
-});
-const candleSeries = chart.addCandlestickSeries();
-const signalSeries = chart.addCircleSeries({ color: '#00ff00', radius: 6 }); // للإشارات
+    // ===== إنشاء الشارت =====
+    const chart = LightweightCharts.createChart(document.getElementById('chart'), {
+        layout: { backgroundColor: '#111', textColor: '#fff' },
+        rightPriceScale: { borderColor: '#555' },
+        timeScale: { borderColor: '#555', timeVisible: true }
+    });
 
-const symbol = 'BTCUSDT'; 
-const interval = '1m';
+    const candleSeries = chart.addCandlestickSeries();
 
-// إعدادات MA وRSI
-const maFastLen = 9;
-const maSlowLen = 21;
-const rsiLen = 14;
-const rsiOverbought = 70;
-const rsiOversold = 30;
+    // خطوط MA
+    const maFastSeries = chart.addLineSeries({ color: 'lime', lineWidth: 2 });
+    const maSlowSeries = chart.addLineSeries({ color: 'red', lineWidth: 2 });
 
-// ======== دوال حسابية ========
-function sma(values, period) {
-    let result = [];
-    for (let i = 0; i < values.length; i++) {
-        if (i < period - 1) {
-            result.push(null);
-            continue;
+    // إعدادات مؤشر
+    const maFastLen = 9;
+    const maSlowLen = 21;
+    const rsiLen = 14;
+    const rsiOverbought = 70;
+    const rsiOversold = 30;
+
+    let candles = [];
+
+    function calculateSMA(values, length) {
+        let sma = [];
+        for (let i = 0; i < values.length; i++) {
+            if (i < length - 1) { sma.push(null); continue; }
+            const slice = values.slice(i - length + 1, i + 1);
+            const avg = slice.reduce((a, b) => a + b, 0) / length;
+            sma.push(avg);
         }
-        let sum = 0;
-        for (let j = 0; j < period; j++) sum += values[i - j];
-        result.push(sum / period);
+        return sma;
     }
-    return result;
-}
 
-function rsi(values, period) {
-    let result = [];
-    let gains = 0, losses = 0;
-    for (let i = 1; i <= period; i++) {
-        const change = values[i] - values[i-1];
-        if (change > 0) gains += change;
-        else losses -= change;
-    }
-    let avgGain = gains / period;
-    let avgLoss = losses / period;
-    result[period] = 100 - 100/(1 + avgGain/avgLoss);
-    for (let i = period+1; i < values.length; i++) {
-        const change = values[i] - values[i-1];
-        let gain = change > 0 ? change : 0;
-        let loss = change < 0 ? -change : 0;
-        avgGain = (avgGain * (period-1) + gain)/period;
-        avgLoss = (avgLoss * (period-1) + loss)/period;
-        result[i] = 100 - 100/(1 + avgGain/avgLoss);
-    }
-    for(let i=0;i<period;i++) result[i]=null;
-    return result;
-}
-
-// ======== جلب البيانات ورسمها ========
-async function fetchCandles() {
-    const response = await fetch(`https://api.binance.com/api/v3/klines?symbol=${symbol}&interval=${interval}&limit=200`);
-    const data = await response.json();
-    const candles = data.map(d => ({
-        time: d[0]/1000,
-        open: parseFloat(d[1]),
-        high: parseFloat(d[2]),
-        low: parseFloat(d[3]),
-        close: parseFloat(d[4])
-    }));
-    candleSeries.setData(candles);
-    document.getElementById('price').innerText = 'السعر الحالي: ' + candles[candles.length-1].close + ' USD';
-
-    // حساب المؤشرات
-    const closes = candles.map(c => c.close);
-    const maFast = sma(closes, maFastLen);
-    const maSlow = sma(closes, maSlowLen);
-    const rsiValues = rsi(closes, rsiLen);
-
-    // توليد إشارات
-    let signals = [];
-    for (let i = 1; i < candles.length; i++) {
-        // شراء
-        if (maFast[i] && maSlow[i] && rsiValues[i] && maFast[i-1] < maSlow[i-1] && maFast[i] > maSlow[i] && rsiValues[i] < rsiOverbought) {
-            signals.push({time: candles[i].time, value: candles[i].low*0.995, type: 'BUY'});
+    function calculateRSI(values, length) {
+        let rsi = [];
+        for (let i = 0; i < values.length; i++) {
+            if (i < length) { rsi.push(null); continue; }
+            let gains = 0, losses = 0;
+            for (let j = i - length + 1; j <= i; j++) {
+                const diff = values[j] - values[j-1];
+                if (diff > 0) gains += diff;
+                else losses -= diff;
+            }
+            const rs = gains / (losses || 1);
+            rsi.push(100 - (100 / (1 + rs)));
         }
-        // بيع
-        if (maFast[i] && maSlow[i] && rsiValues[i] && maFast[i-1] > maSlow[i-1] && maFast[i] < maSlow[i] && rsiValues[i] > rsiOversold) {
-            signals.push({time: candles[i].time, value: candles[i].high*1.005, type: 'SELL'});
-        }
+        return rsi;
     }
 
-    signalSeries.setData(signals.map(s => ({ time: s.time, value: s.value })));
-}
+    function updateIndicators() {
+        const closes = candles.map(c => c.close);
+        const maFast = calculateSMA(closes, maFastLen);
+        const maSlow = calculateSMA(closes, maSlowLen);
+        maFastSeries.setData(candles.map((c, i) => ({ time: c.time, value: maFast[i] })));
+        maSlowSeries.setData(candles.map((c, i) => ({ time: c.time, value: maSlow[i] })));
 
-// تحديث كل 5 ثواني
-fetchCandles();
-setInterval(fetchCandles, 5000);
+        // إشارات Buy / Sell
+        const rsi = calculateRSI(closes, rsiLen);
+        candles.forEach((c, i) => {
+            if (i === 0) return;
+            if (maFast[i] && maSlow[i] && rsi[i]) {
+                if (maFast[i-1] < maSlow[i-1] && maFast[i] > maSlow[i] && rsi[i] < rsiOverbought) {
+                    chart.addMarker({ time: c.time, position: 'belowBar', color: 'green', shape: 'arrowUp', text: 'BUY' });
+                }
+                if (maFast[i-1] > maSlow[i-1] && maFast[i] < maSlow[i] && rsi[i] > rsiOversold) {
+                    chart.addMarker({ time: c.time, position: 'aboveBar', color: 'red', shape: 'arrowDown', text: 'SELL' });
+                }
+            }
+        });
+    }
+
+    // ===== Binance WebSocket =====
+    const symbol = "btcusdt"; // يمكن تغييره لأي عملة
+    const interval = "1m"; // 1 دقيقة
+    const ws = new WebSocket(`wss://stream.binance.com:9443/ws/${symbol}@kline_${interval}`);
+
+    ws.onmessage = (event) => {
+        const msg = JSON.parse(event.data);
+        const k = msg.k;
+        const candle = {
+            time: k.t / 1000,
+            open: parseFloat(k.o),
+            high: parseFloat(k.h),
+            low: parseFloat(k.l),
+            close: parseFloat(k.c)
+        };
+
+        // تحديث الشمعة الأخيرة أو إضافة جديدة
+        if (candles.length > 0 && candles[candles.length - 1].time === candle.time) {
+            candles[candles.length - 1] = candle;
+        } else {
+            candles.push(candle);
+        }
+
+        candleSeries.setData(candles);
+        updateIndicators();
+        document.getElementById('price').innerText = 'السعر الحالي: ' + k.c + ' USD';
+    };
 </script>
-
 </body>
 </html>
