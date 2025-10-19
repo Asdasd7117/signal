@@ -1,16 +1,21 @@
-const express = require('express');
-const fetch = require('node-fetch');
+import express from 'express';
+import fetch from 'node-fetch';
+
 const app = express();
 
-app.use(express.static('public')); // مجلد index.html
+// ملفات static (HTML, JS, CSS)
+app.use(express.static('public'));
 
-// API endpoint لجلب بيانات Binance
-app.get('/klines', async (req, res) => {
+// نقطة API لجلب بيانات Binance Klines
+app.get('/api/klines', async (req, res) => {
     const symbol = req.query.symbol || 'BTCUSDT';
     const interval = req.query.interval || '1m';
     const limit = req.query.limit || '100';
+
     try {
-        const response = await fetch(`https://api.binance.com/api/v3/klines?symbol=${symbol}&interval=${interval}&limit=${limit}`);
+        const response = await fetch(
+            `https://api.binance.com/api/v3/klines?symbol=${symbol}&interval=${interval}&limit=${limit}`
+        );
         const data = await response.json();
         res.json(data);
     } catch (error) {
