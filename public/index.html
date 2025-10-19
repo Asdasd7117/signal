@@ -3,19 +3,21 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Binance Real Chart</title>
+<title>Binance Real Chart with MA & RSI</title>
 <script src="https://cdn.jsdelivr.net/npm/lightweight-charts@3.7.0/dist/lightweight-charts.standalone.production.js"></script>
 <style>
-    body { margin: 0; padding: 0; }
+    body { margin: 0; padding: 0; background-color: #1e1e1e; color: #fff; font-family: Arial; }
     #chart { width: 100%; height: 500px; }
+    #rsi { width: 100%; height: 150px; margin-top: 10px; }
 </style>
 </head>
 <body>
 <div id="chart"></div>
+<div id="rsi"></div>
 
 <script>
 async function fetchKlines() {
-    const res = await fetch('/api/klines?symbol=BTCUSDT&interval=1m&limit=100');
+    const res = await fetch('/api/klines?symbol=BTCUSDT&interval=1m&limit=200');
     const data = await res.json();
     return data.map(k => ({
         time: k[0] / 1000,
@@ -26,22 +28,106 @@ async function fetchKlines() {
     }));
 }
 
+// حساب MA
+function calculateMA(data, period) {
+    const ma = [];
+    for (let i = 0; i < data.length; i++) {
+        if (i < period - 1) {
+            ma.push({ time: data[i].time, value: null });
+            continue;
+        }
+        let sum = 0;
+        for (let j = i - period + 1; j <= i; j++) sum += data[j].close;
+        ma.push({ time: data[i].time, value: sum / period });
+    }
+    return ma;
+}
+
+// حساب RSI
+function calculateRSI(data, period = 14) {
+    const rsi = [];
+    let gains = 0, losses = 0;
+    for (let i = 1; i <= period; i++) {
+        const change = data[i].close - data[i - 1].close;
+        if (change > 0) gains += change; else losses -= change;
+    }
+    let avgGain = gains / period;
+    let avgLoss = losses / period;
+    rsi.push({ time: data[period].time, value: 100 - (100 / (1 + avgGain / avgLoss)) });
+
+    for (let i = period + 1; i < data.length; i++) {
+        const change = data[i].close - data[i - 1].close;
+        const gain = change > 0 ? change : 0;
+        const loss = change < 0 ? -change : 0;
+        avgGain = (avgGain * (period - 1) + gain) / period;
+        avgLoss = (avgLoss * (period - 1) + loss) / period;
+        rsi.push({ time: data[i].time, value: 100 - (100 / (1 + avgGain / avgLoss)) });
+    }
+    return rsi;
+}
+
 async function drawChart() {
-    const chartData = await fetchKlines();
+    const data = await fetchKlines();
+    const fastMA = calculateMA(data, 9);
+    const slowMA = calculateMA(data, 21);
+    const rsiData = calculateRSI(data, 14);
+
+    // الشارت الرئيسي
     const chart = LightweightCharts.createChart(document.getElementById('chart'), {
-        layout: { backgroundColor: '#1e1e1e', textColor: '#ffffff' },
+        layout: { backgroundColor: '#1e1e1e', textColor: '#fff' },
         grid: { vertLines: { color: '#333' }, horzLines: { color: '#333' } },
         rightPriceScale: { borderColor: '#555' },
         timeScale: { borderColor: '#555' }
     });
-
     const candleSeries = chart.addCandlestickSeries();
-    candleSeries.setData(chartData);
+    candleSeries.setData(data);
 
-    // تحديث البيانات كل دقيقة
+    // خطوط MA
+    const maFastSeries = chart.addLineSeries({ color: 'lime', lineWidth: 2 });
+    maFastSeries.setData(fastMA.filter(m => m.value !== null));
+    const maSlowSeries = chart.addLineSeries({ color: 'red', lineWidth: 2 });
+    maSlowSeries.setData(slowMA.filter(m => m.value !== null));
+
+    // إشارات شراء وبيع
+    for (let i = 1; i < data.length; i++) {
+        if (fastMA[i].value && slowMA[i].value) {
+            if (fastMA[i].value > slowMA[i].value && fastMA[i-1].value <= slowMA[i-1].value) {
+                chart.addMarker({
+                    time: data[i].time,
+                    position: 'belowBar',
+                    color: 'green',
+                    shape: 'arrowUp',
+                    text: 'BUY'
+                });
+            } else if (fastMA[i].value < slowMA[i].value && fastMA[i-1].value >= slowMA[i-1].value) {
+                chart.addMarker({
+                    time: data[i].time,
+                    position: 'aboveBar',
+                    color: 'red',
+                    shape: 'arrowDown',
+                    text: 'SELL'
+                });
+            }
+        }
+    }
+
+    // RSI chart
+    const rsiChart = LightweightCharts.createChart(document.getElementById('rsi'), {
+        layout: { backgroundColor: '#1e1e1e', textColor: '#fff' },
+        grid: { vertLines: { color: '#333' }, horzLines: { color: '#333' } },
+        rightPriceScale: { borderColor: '#555' },
+        timeScale: { borderColor: '#555' }
+    });
+    const rsiSeries = rsiChart.addLineSeries({ color: 'orange' });
+    rsiSeries.setData(rsiData);
+
+    // تحديث كل دقيقة
     setInterval(async () => {
         const newData = await fetchKlines();
         candleSeries.setData(newData);
+        maFastSeries.setData(calculateMA(newData, 9).filter(m => m.value !== null));
+        maSlowSeries.setData(calculateMA(newData, 21).filter(m => m.value !== null));
+        rsiSeries.setData(calculateRSI(newData, 14));
     }, 60000);
 }
 
