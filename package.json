@@ -1,13 +1,18 @@
 {
-  "name": "myBinanceApp",
+  "name": "my-trading-app",
   "version": "1.0.0",
+  "description": "تطبيق Node.js لعرض الشارتات",
   "main": "server.js",
+  "type": "module",
   "scripts": {
     "start": "node server.js"
   },
   "dependencies": {
-    "express": "^4.18.2",
-    "node-fetch": "^3.3.2"
+    "express": "^4.18.2"
   },
-  "type": "module"
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "author": "YourName",
+  "license": "MIT"
 }
