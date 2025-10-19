@@ -1,138 +1,73 @@
 <!DOCTYPE html>
 <html lang="ar">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>ALGOX Real Trading Signals</title>
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-<style>
-  body { font-family: Arial; text-align: center; padding: 20px; }
-  canvas { max-width: 900px; margin: auto; }
-</style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>شارت Binance حقيقي</title>
+    <script src="https://unpkg.com/lightweight-charts/dist/lightweight-charts.standalone.production.js"></script>
+    <style>
+        body { margin: 0; font-family: Arial, sans-serif; background-color: #1e1e1e; color: white; }
+        #chart { width: 100%; height: 100vh; }
+    </style>
 </head>
 <body>
-<h1>ALGOX Signals - BTC/USDT (Real-Time)</h1>
-<canvas id="chart"></canvas>
+    <div id="chart"></div>
+    <script>
+        const chart = LightweightCharts.createChart(document.getElementById('chart'), {
+            width: window.innerWidth,
+            height: window.innerHeight,
+            layout: {
+                backgroundColor: '#1e1e1e',
+                textColor: '#d1d4dc',
+            },
+            grid: {
+                vertLines: { color: '#444' },
+                horzLines: { color: '#444' },
+            },
+            crosshair: { mode: LightweightCharts.CrosshairMode.Normal },
+            rightPriceScale: { borderColor: '#555' },
+            timeScale: { borderColor: '#555' },
+        });
 
-<script>
-// ===== إعدادات المؤشرات =====
-const maFastLen = 9;
-const maSlowLen = 21;
-const rsiLen = 14;
-const rsiOverbought = 70;
-const rsiOversold = 30;
-const takeProfitPercent = 2; // 2%
-const stopLossPercent = 1;   // 1%
-const symbol = "BTCUSDT";
-const interval = "1m"; // دقيقة
-let lastLong = null;
-let lastShort = null;
+        const candleSeries = chart.addCandlestickSeries({
+            upColor: '#4caf50',
+            downColor: '#f44336',
+            borderDownColor: '#f44336',
+            borderUpColor: '#4caf50',
+            wickDownColor: '#f44336',
+            wickUpColor: '#4caf50',
+        });
 
-// ===== دوال الحساب =====
-function SMA(data, len) {
-  let sma = [];
-  for (let i = 0; i < data.length; i++) {
-    if (i < len - 1) { sma.push(null); continue; }
-    let sum = 0;
-    for (let j = i - len + 1; j <= i; j++) sum += data[j];
-    sma.push(sum / len);
-  }
-  return sma;
-}
+        // جلب بيانات الشموع من Binance
+        async function fetchCandles(symbol='BTCUSDT', interval='1m', limit=100) {
+            const url = `https://api.binance.com/api/v3/klines?symbol=${symbol}&interval=${interval}&limit=${limit}`;
+            const response = await fetch(url);
+            const data = await response.json();
+            return data.map(d => ({
+                time: d[0] / 1000, // Timestamp بالثواني
+                open: parseFloat(d[1]),
+                high: parseFloat(d[2]),
+                low: parseFloat(d[3]),
+                close: parseFloat(d[4]),
+            }));
+        }
 
-function RSI(data, len) {
-  let rsi = [];
-  for (let i = 0; i < data.length; i++) {
-    if (i < len) { rsi.push(null); continue; }
-    let gain = 0, loss = 0;
-    for (let j = i - len + 1; j <= i; j++) {
-      let diff = data[j] - data[j-1];
-      if (diff > 0) gain += diff; else loss -= diff;
-    }
-    let RS = gain / (loss || 1);
-    rsi.push(100 - (100 / (1 + RS)));
-  }
-  return rsi;
-}
+        async function initChart() {
+            const candles = await fetchCandles();
+            candleSeries.setData(candles);
+        }
 
-// ===== جلب بيانات Binance =====
-async function fetchPrices() {
-  const url = `https://api.binance.com/api/v3/klines?symbol=${symbol}&interval=${interval}&limit=100`;
-  const res = await fetch(url);
-  const data = await res.json();
-  return data.map(candle => parseFloat(candle[4])); // سعر الإغلاق
-}
+        initChart();
 
-// ===== حساب الإشارات مع TP / SL =====
-function computeSignals(prices, maFast, maSlow, rsi) {
-  let buy = [];
-  let sell = [];
-  let tpSl = []; // تخزين TP/SL لكل صفقة
+        // تحديث تلقائي كل 5 ثواني
+        setInterval(async () => {
+            const candles = await fetchCandles();
+            candleSeries.setData(candles);
+        }, 5000);
 
-  for (let i = 0; i < prices.length; i++) {
-    buy.push(null);
-    sell.push(null);
-    tpSl.push({tp: null, sl: null});
-
-    if (maFast[i] !== null && maSlow[i] !== null && rsi[i] !== null) {
-      // صفقة شراء
-      if (maFast[i] > maSlow[i] && rsi[i] < rsiOverbought && !lastLong) {
-        buy[i] = prices[i];
-        tpSl[i].tp = prices[i] * (1 + takeProfitPercent / 100);
-        tpSl[i].sl = prices[i] * (1 - stopLossPercent / 100);
-        lastLong = prices[i];
-        lastShort = null;
-      }
-      // صفقة بيع
-      if (maFast[i] < maSlow[i] && rsi[i] > rsiOversold && !lastShort) {
-        sell[i] = prices[i];
-        tpSl[i].tp = prices[i] * (1 - takeProfitPercent / 100);
-        tpSl[i].sl = prices[i] * (1 + stopLossPercent / 100);
-        lastShort = prices[i];
-        lastLong = null;
-      }
-
-      // إعادة التهيئة عند الخروج من الصفقة
-      if (lastLong && (prices[i] >= tpSl[i].tp || prices[i] <= tpSl[i].sl)) lastLong = null;
-      if (lastShort && (prices[i] <= tpSl[i].tp || prices[i] >= tpSl[i].sl)) lastShort = null;
-    }
-  }
-  return {buy, sell, tpSl};
-}
-
-// ===== تحديث الرسم =====
-async function updateChart() {
-  const prices = await fetchPrices();
-  const maFast = SMA(prices, maFastLen);
-  const maSlow = SMA(prices, maSlowLen);
-  const rsi = RSI(prices, rsiLen);
-  const signals = computeSignals(prices, maFast, maSlow, rsi);
-
-  const labels = prices.map((_, i) => i + 1);
-  const data = {
-    labels: labels,
-    datasets: [
-      { label: 'Close', data: prices, borderColor: 'blue', fill: false, tension: 0.2 },
-      { label: 'Fast MA', data: maFast, borderColor: 'green', fill: false, tension: 0.2 },
-      { label: 'Slow MA', data: maSlow, borderColor: 'red', fill: false, tension: 0.2 },
-      { label: 'BUY', data: signals.buy, type: 'scatter', backgroundColor: 'green', pointRadius: 6 },
-      { label: 'SELL', data: signals.sell, type: 'scatter', backgroundColor: 'red', pointRadius: 6 }
-    ]
-  };
-
-  const config = { type: 'line', data: data, options: { plugins: { legend: { display: true } }, scales: { y: { beginAtZero: false } } } };
-
-  if (window.myChart) {
-    window.myChart.data = data;
-    window.myChart.update();
-  } else {
-    window.myChart = new Chart(document.getElementById('chart'), config);
-  }
-}
-
-// تحديث كل 30 ثانية
-updateChart();
-setInterval(updateChart, 30000);
-</script>
+        window.addEventListener('resize', () => {
+            chart.resize(window.innerWidth, window.innerHeight);
+        });
+    </script>
 </body>
 </html>
