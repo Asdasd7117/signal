@@ -1,18 +1,20 @@
 // server.js
-import express from 'express';
-import fetch from 'node-fetch';
+import express from 'express'; // بدل require('express')
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const app = express();
-app.use(express.static('public')); // index.html داخل مجلد public
+const PORT = process.env.PORT || 3000;
 
-app.get('/api/klines', async (req, res) => {
-    const symbol = req.query.symbol || 'BTCUSDT';
-    const interval = req.query.interval || '1m';
-    const limit = req.query.limit || 200;
+app.use(express.static(path.join(__dirname, 'public')));
 
-    const response = await fetch(`https://api.binance.com/api/v3/klines?symbol=${symbol}&interval=${interval}&limit=${limit}`);
-    const data = await response.json();
-    res.json(data);
+app.get('/', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public/index.html'));
 });
 
-app.listen(3000, () => console.log('Server running on http://localhost:3000'));
+app.listen(PORT, () => {
+  console.log(`Server running on port ${PORT}`);
+});
